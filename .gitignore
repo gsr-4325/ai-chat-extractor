@@ -12,3 +12,6 @@ outputs/
 # OS files
 Thumbs.db
 desktop.ini
+
+# temporary files
+_temp
