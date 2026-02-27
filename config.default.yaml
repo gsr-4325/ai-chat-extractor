@@ -1,0 +1,35 @@
+# Default Configuration for Chat Extractor
+clip:
+  enabled: true
+  notice:
+    toast:
+      enabled: true
+      open_on_click: true
+      title: "Chat Extracted ({model}) [{turns} turns]"
+    message: '{short summary}'
+    status_toast:
+      processing: Processing clipboard...
+      busy: Already extracting, please wait.
+    sound:
+      enabled: true
+      sound_file_path: C:\Windows\Media\chimes.wav
+
+output:
+  enabled: true
+  # Directory where Markdown files are saved
+  # Supported variables: {year}, {month}, {date}
+  dir: outputs/chat_logs/{year}{month}/{date}
+  # Filename structure
+  # Supported variables: {time}, {ai model}
+  filename: chat_log_{time}.{ai model}.md
+
+# Date and time formats
+# (Uses javascript-like tokens by default, or python strftime tokens)
+year_format: yyyy
+month_format: MM
+date_format: dd
+time_format: yyyyMMdd_HHmmss
+
+# List of exact strings or regexes to remove from output
+removes:
+  - ''

@@ -1,0 +1,19 @@
+description: OpenAI ChatGPT export format
+method: container_list
+container_selector: article[data-turn]
+role_attr: data-turn
+role_map:
+  user: user
+  assistant: ai
+content_selectors:
+  user:
+  - div[data-message-author-role='user'] .whitespace-pre-wrap
+  ai:
+  - div[data-message-author-role='assistant'] .markdown
+fallback_ai_text: false
+noise_patterns:
+- ChatGPT
+- You
+- Copy code
+- Regenerate response
+main_selector: main

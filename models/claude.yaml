@@ -1,0 +1,26 @@
+description: Claude.ai web interface export format
+method: container_list
+container_selector: div[data-test-render-count]
+role_attr: data-testid
+role_map:
+  user-message: user
+content_selectors:
+  user:
+  - div[data-testid='user-message']
+  ai:
+  - .font-claude-response
+  - div[data-is-streaming]
+  - .progressive-markdown
+  - .standard-markdown
+signature_patterns:
+- claude.ai
+- font-claude-response
+- data-testid="user-message"
+- アンソロピック
+- Anthropic
+noise_patterns:
+- 完了
+- 読み取り中
+- 分析中
+- 文学的視点から
+main_selector: 'div.mx-auto.flex.size-full.max-w-3xl.flex-col, #main-content'

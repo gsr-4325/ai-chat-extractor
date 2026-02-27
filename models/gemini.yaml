@@ -1,0 +1,27 @@
+description: Google Gemini export format
+method: tag_stream
+tags:
+- user-query
+- model-response
+role_map:
+  user-query: user
+  model-response: ai
+content_selectors:
+  user:
+  - div.query-text
+  - div.query-content
+  - user-query
+  ai:
+  - message-content
+  - model-response
+  - .model-response-text
+fallback_ai_text: true
+file_extensions:
+- .html.txt
+- .raw.html
+is_default: true
+noise_patterns:
+- Gemini said
+- You said
+- Gemini is AI and can make mistakes.
+main_selector: div[role='main'], main, .chat-history
