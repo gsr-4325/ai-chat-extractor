@@ -1,17 +1,21 @@
 description: Claude.ai web interface export format
 method: container_list
-container_selector: div[data-test-render-count]
+container_selector: 'div[data-test-render-count], div.flex.flex-col.gap-2, .font-claude-response, article'
 role_attr: data-testid
 role_map:
   user-message: user
 content_selectors:
   user:
   - div[data-testid='user-message']
+  - '.font-user-message'
+  - '.whitespace-pre-wrap'
   ai:
   - .font-claude-response
+  - .font-claude-response-body
   - div[data-is-streaming]
   - .progressive-markdown
   - .standard-markdown
+  - '.font-claude-message'
 signature_patterns:
 - claude.ai
 - font-claude-response
@@ -23,4 +27,6 @@ noise_patterns:
 - 読み取り中
 - 分析中
 - 文学的視点から
-main_selector: 'div.mx-auto.flex.size-full.max-w-3xl.flex-col, #main-content'
+- "Copy"
+- "Retry"
+main_selector: 'div.mx-auto.flex.size-full.max-w-3xl.flex-col, #main-content, main'

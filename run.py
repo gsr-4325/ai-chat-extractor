@@ -81,7 +81,7 @@ def interactive_setup(config_paths):
     
     # Default output directory
     default_out = "outputs/chat_logs"
-    user_out = input(f"Enter output directory (default: {default_out}): ").strip()
+    user_out = input(f"Enter output directory (default: {default_out}): ").strip().strip('"').strip("'")
     if not user_out:
         user_out = default_out
         
@@ -623,6 +623,7 @@ def extract_turns_from_soup(soup: BeautifulSoup, profile: dict) -> list[dict[str
                 turns.append({"role": "ai", "html": content_html})
 
     if not turns:
+        log_debug("Starting fallback tag-based extraction.")
         potential_turns = soup.find_all(["div", "p", "span", "section", "article"])
         current_role, current_html = None, []
         def flush_tag(role, html_list):
@@ -634,6 +635,9 @@ def extract_turns_from_soup(soup: BeautifulSoup, profile: dict) -> list[dict[str
         user_re = r"^(You|User) said$|^You$|^User$|^##\s*User$|^User:$"
         ai_re = r"^(Gemini|ChatGPT|Claude|AI) said$|^(Gemini|ChatGPT|Claude|AI)$|^##\s*AI$|^(Gemini|ChatGPT|Claude|AI):$"
         
+        # Performance optimization: pre-calculate which elements are in potential_turns for faster lookup
+        tag_set = set(id(t) for t in potential_turns)
+
         for elem in potential_turns:
             text = elem.get_text().strip()
             if re.match(user_re, text, re.I):
@@ -643,9 +647,16 @@ def extract_turns_from_soup(soup: BeautifulSoup, profile: dict) -> list[dict[str
                 flush_tag(current_role, current_html)
                 current_role, current_html = "ai", []
             elif current_role and elem.name in ["div", "p", "pre", "span"]:
-                if not any(parent in potential_turns for parent in elem.parents):
+                # Faster check for nested elements
+                is_nested = False
+                for parent in elem.parents:
+                    if id(parent) in tag_set:
+                        is_nested = True
+                        break
+                if not is_nested:
                     current_html.append(str(elem))
         flush_tag(current_role, current_html)
+        log_debug(f"Fallback extraction completed. Found {len(turns)} turns.")
     return turns
 
 def shift_headers(soup: BeautifulSoup):
@@ -858,16 +869,22 @@ def main():
     hex_debug = " ".join(f"{ord(c):04x}" for c in content[:100])
     log_debug(f"Raw content hex (first 100 chars): {hex_debug}")
 
+    log_debug(f"Input content length: {len(content)} chars.")
     soup = BeautifulSoup(content, "html.parser")
+    log_debug("BeautifulSoup parsing complete.")
     profiles = load_profiles()
+    log_debug(f"Loaded {len(profiles)} profiles.")
     model_key, profile = detect_profile(soup, profiles)
     
     if profile:
         print(f"Detected profile: {model_key}")
+        log_debug(f"Using profile: {model_key} (method: {profile.get('method')})")
     else:
         log_debug("AI model format not detected. Falling back to generic text extraction.")
 
+    log_debug("Starting turn extraction...")
     turns = extract_turns_from_soup(soup, profile)
+    log_debug(f"Extraction complete. Found {len(turns)} turns.")
     if not turns:
         log_debug("Processing as plain text.")
         turns = [{"role": "user", "html": content}]
@@ -892,10 +909,12 @@ def main():
     noise = profile.get("noise_patterns", []) + config.get("removes", [])
     
     for idx, turn in enumerate(turns):
-        header = "## User" if turn["role"] == "user" else "## AI"
-        log_debug(f"Turn {idx} ({turn['role']}) raw HTML:\n{turn['html'][:200]}...")
+        turn_num = idx + 1
+        header = f"## {turn_num}. User" if turn["role"] == "user" else f"## {turn_num}. AI"
+        log_debug(f"Processing turn {idx} ({turn['role']})...")
         text = html_to_markdown(turn["html"], noise_patterns=noise)
         if text.strip(): md_output.append(f"{header}\n\n{text}\n")
+    log_debug("Turn processing complete.")
 
     final_md = "\n".join(md_output)
 
@@ -911,6 +930,9 @@ def main():
         out_dir_tmpl = config["output"]["dir"]
         resolved_out_dir = out_dir_tmpl.replace("{year}", y_str).replace("{month}", m_str).replace("{date}", d_str)
         
+        # Clean up quotes if they were accidentally included in config
+        resolved_out_dir = resolved_out_dir.strip().strip('"').strip("'")
+        
         # If path is relative, make it relative to the script's parent directory
         out_path = Path(resolved_out_dir)
         if not out_path.is_absolute():
@@ -923,6 +945,7 @@ def main():
         # Resolve variables in filename
         filename = config["output"]["filename"].replace("{year}", y_str).replace("{month}", m_str).replace("{date}", d_str)
         filename = filename.replace("{time}", time_str).replace("{model}", model_key).replace("{ai model}", model_key).replace("{title}", sanitize_filename(title))
+        filename = filename.strip().strip('"').strip("'")
         
         filepath = out_dir / filename
         try:
