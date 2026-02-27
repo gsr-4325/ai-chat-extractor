@@ -192,6 +192,18 @@ def load_config():
         user_config_data = load_file(paths["appdata"])
     else:
         # No user config found -> First run setup
+        # Check if we are in an interactive terminal.
+        # Note: sys.stdin.isatty() is True in CMD/PowerShell but False when run via VBScript/Task Scheduler.
+        if not sys.stdin or not sys.stdin.isatty():
+            # Show a toast via show_status_toast which uses a default config if needed
+            msg = "Initial setup required. Please run run.py directly to configure."
+            try:
+                show_status_toast(config, "Chat Extractor", msg)
+            except Exception:
+                pass
+            print(f"Error: {msg}")
+            sys.exit(1)
+            
         user_config_data = interactive_setup(paths)
         
     deep_merge(config, user_config_data)

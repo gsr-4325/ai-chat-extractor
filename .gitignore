@@ -15,3 +15,6 @@ desktop.ini
 
 # temporary files
 _temp
+
+# rules for agents
+.agents
