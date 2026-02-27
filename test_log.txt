@@ -1,5 +1,0 @@
-
-=== Chat Extractor: First Time Setup ===
-Welcome! No configuration file found. Let's set up the basics.
-
-Enter output directory (default: outputs/chat_logs): 

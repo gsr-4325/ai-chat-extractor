@@ -224,132 +224,100 @@ def load_config():
 
 def show_toast(config, model_name, summary, turn_count=0, filepath: Path = None):
     """Show Windows Toast notification via PowerShell.
-    If filepath is provided, clicking the toast will open the file."""
+    Uses protocol activation for clicking the toast to open the file reliably."""
     clip_cfg = config.get("clip", {})
-    if not isinstance(clip_cfg, dict): return
-    if not clip_cfg.get("enabled"): return
+    if not isinstance(clip_cfg, dict) or not clip_cfg.get("enabled"): return
 
     notice = clip_cfg.get("notice", {})
-    toast = notice.get("toast", {})
-    if not toast.get("enabled"): return
+    toast_cfg = notice.get("toast", {})
+    if not toast_cfg.get("enabled"): return
 
     turns_str = str(turn_count)
-    title = toast.get("title", "Chat Extracted ({model}) [{turns} turns]").replace("{ai model}", model_name).replace("{model}", model_name).replace("{turns}", turns_str).replace("{n}", turns_str)
-    msg = toast.get("message", "{short summary}").replace("{ai model}", model_name).replace("{model}", model_name).replace("{short summary}", summary).replace("{turns}", turns_str).replace("{n}", turns_str)
+    title = toast_cfg.get("title", "Chat Extracted ({model}) [{turns} turns]").replace("{ai model}", model_name).replace("{model}", model_name).replace("{turns}", turns_str).replace("{n}", turns_str)
+    msg = toast_cfg.get("message", "{short summary}").replace("{ai model}", model_name).replace("{model}", model_name).replace("{short summary}", summary).replace("{turns}", turns_str).replace("{n}", turns_str)
     
     sound = notice.get("sound", {})
     is_silent = not sound.get("enabled", True)
     
-    # Click behavior
-    open_on_click = toast.get("open_on_click", True)
+    open_on_click = toast_cfg.get("open_on_click", True)
     can_open = filepath and filepath.exists() and open_on_click
 
-    # Building PowerShell command
-    silent_snippet = ""
-    if is_silent:
-        silent_snippet = '$audio = $xml.CreateElement("audio"); $audio.SetAttribute("silent", "true"); $xml.GetElementsByTagName("toast")[0].AppendChild($audio) | Out-Null'
+    # Official Windows PowerShell AUMID (Required for reliable protocol activation/clicks)
+    app_id = r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
 
-    if not can_open:
-        # Simple fire-and-forget toast
-        ps_code = f"""
-$appId = "ChatExtractor"
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-$xml = [xml]$template.GetXml()
-$xml.GetElementsByTagName("text")[0].AppendChild($xml.CreateTextNode("{title}")) | Out-Null
-$xml.GetElementsByTagName("text")[1].AppendChild($xml.CreateTextNode("{msg}")) | Out-Null
-{silent_snippet}
-$toastXml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$toastXml.LoadXml($xml.OuterXml)
-$toast = New-Object Windows.UI.Notifications.ToastNotification $toastXml
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
-""".strip()
-    else:
-        # Interactive toast that waits for events
-        # We use Unregister-Event and long timeout to ensure the process lives long enough to handle the click
-        abs_path = str(filepath.absolute()).replace("'", "''")
-        ps_code = f"""
-$appId = "ChatExtractor"
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-$xml = [xml]$template.GetXml()
-$xml.GetElementsByTagName("text")[0].AppendChild($xml.CreateTextNode("{title}")) | Out-Null
-$xml.GetElementsByTagName("text")[1].AppendChild($xml.CreateTextNode("{msg}")) | Out-Null
-{silent_snippet}
-$toastXml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$toastXml.LoadXml($xml.OuterXml)
-$toast = New-Object Windows.UI.Notifications.ToastNotification $toastXml
-
-$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId)
-
-# Register events
-$onActivated = Register-ObjectEvent -InputObject $toast -EventName Activated -Action {{
-    Invoke-Item '{abs_path}'
-    $global:toastActionDone = $true
-}}
-$onDismissed = Register-ObjectEvent -InputObject $toast -EventName Dismissed -Action {{
-    $global:toastActionDone = $true
-}}
-$onFailed = Register-ObjectEvent -InputObject $toast -EventName Failed -Action {{
-    $global:toastActionDone = $true
-}}
-
-$notifier.Show($toast)
-
-# Wait for interaction or timeout (approx 15s)
-$timeout = 15
-$timer = 0
-while (-not $global:toastActionDone -and $timer -lt $timeout) {{
-    Start-Sleep -Seconds 1
-    $timer++
-}}
-
-# Cleanup
-Unregister-Event -SourceIdentifier $onActivated.Name
-Unregister-Event -SourceIdentifier $onDismissed.Name
-Unregister-Event -SourceIdentifier $onFailed.Name
-""".strip()
-
-    # Base64 encoding for PowerShell to avoid escaping issues
-    import base64
-    encoded_ps = base64.b64encode(ps_code.encode("utf-16le")).decode("ascii")
-    full_cmd = f'powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {encoded_ps}'
-    
-    # Per user rule: always use cmd /c start /min cmd /c
-    # We use a separate process so run.py doesn't hang while waiting for the toast
-    subprocess.Popen(f'cmd /c start /min cmd /c "{full_cmd}"', shell=True)
-
-
-def show_status_toast(config, title: str, message: str):
-    """Show a fast, always-silent status toast (processing / busy) via direct PowerShell.
-    Uses no cmd /c layers so it appears more quickly than show_toast."""
-    clip_cfg = config.get("clip", {})
-    if not isinstance(clip_cfg, dict): return
-    if not clip_cfg.get("enabled"): return
-    notice = clip_cfg.get("notice", {})
-    toast = notice.get("toast", {})
-    if not toast.get("enabled"): return
+    # Escape strings for PowerShell (single quotes)
+    def ps_esc(s): return str(s).replace("'", "''")
 
     ps_code = f"""
-$appId = "ChatExtractor"
+$appId = '{ps_esc(app_id)}'
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
 $xml = [xml]$template.GetXml()
-$xml.GetElementsByTagName("text")[0].AppendChild($xml.CreateTextNode("{title}")) | Out-Null
-$xml.GetElementsByTagName("text")[1].AppendChild($xml.CreateTextNode("{message}")) | Out-Null
-$audio = $xml.CreateElement("audio"); $audio.SetAttribute("silent", "true"); $xml.GetElementsByTagName("toast")[0].AppendChild($audio) | Out-Null
+
+# Set Text
+$xml.GetElementsByTagName('text')[0].AppendChild($xml.CreateTextNode('{ps_esc(title)}')) | Out-Null
+$xml.GetElementsByTagName('text')[1].AppendChild($xml.CreateTextNode('{ps_esc(msg)}')) | Out-Null
+
+# Set Activation
+if ('{str(can_open).lower()}' -eq 'true') {{
+    $xml.toast.SetAttribute('launch', '{ps_esc(filepath.absolute().as_uri() if can_open else "")}')
+    $xml.toast.SetAttribute('activationType', 'protocol')
+}}
+
+# Set Audio
+if ('{str(is_silent).lower()}' -eq 'true') {{
+    $audio = $xml.CreateElement('audio')
+    $audio.SetAttribute('silent', 'true')
+    $xml.GetElementsByTagName('toast')[0].AppendChild($audio) | Out-Null
+}}
+
 $toastXml = New-Object Windows.Data.Xml.Dom.XmlDocument
 $toastXml.LoadXml($xml.OuterXml)
 $toast = New-Object Windows.UI.Notifications.ToastNotification $toastXml
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
 """.strip()
+
     import base64
     encoded_ps = base64.b64encode(ps_code.encode("utf-16le")).decode("ascii")
     CREATE_NO_WINDOW = 0x08000000
     subprocess.Popen(
-        ['powershell', '-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded_ps],
+        ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded_ps],
         creationflags=CREATE_NO_WINDOW,
-        close_fds=True,
+        close_fds=True
+    )
+
+def show_status_toast(config, title: str, message: str):
+    """Show a fast, always-silent status toast (processing / busy)."""
+    clip_cfg = config.get("clip", {})
+    if not isinstance(clip_cfg, dict) or not clip_cfg.get("enabled"): return
+    notice = clip_cfg.get("notice", {})
+    toast_cfg = notice.get("toast", {})
+    if not toast_cfg.get("enabled"): return
+
+    app_id = r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
+    def ps_esc(s): return str(s).replace("'", "''")
+
+    ps_code = f"""
+$appId = '{ps_esc(app_id)}'
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$xml = [xml]$template.GetXml()
+$xml.GetElementsByTagName('text')[0].AppendChild($xml.CreateTextNode('{ps_esc(title)}')) | Out-Null
+$xml.GetElementsByTagName('text')[1].AppendChild($xml.CreateTextNode('{ps_esc(message)}')) | Out-Null
+$audio = $xml.CreateElement('audio'); $audio.SetAttribute('silent', 'true'); $xml.GetElementsByTagName('toast')[0].AppendChild($audio) | Out-Null
+$toastXml = New-Object Windows.Data.Xml.Dom.XmlDocument
+$toastXml.LoadXml($xml.OuterXml)
+$toast = New-Object Windows.UI.Notifications.ToastNotification $toastXml
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
+""".strip()
+
+    import base64
+    encoded_ps = base64.b64encode(ps_code.encode("utf-16le")).decode("ascii")
+    CREATE_NO_WINDOW = 0x08000000
+    subprocess.Popen(
+        ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-EncodedCommand', encoded_ps],
+        creationflags=CREATE_NO_WINDOW,
+        close_fds=True
     )
 
 def try_repair_mojibake(text: str) -> str:
