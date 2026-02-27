@@ -8,7 +8,6 @@ content_selectors:
   user:
   - div[data-testid='user-message']
   - '.font-user-message'
-  - '.whitespace-pre-wrap'
   ai:
   - .font-claude-response
   - .font-claude-response-body

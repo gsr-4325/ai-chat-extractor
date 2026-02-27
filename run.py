@@ -577,7 +577,11 @@ def extract_turns_from_soup(soup: BeautifulSoup, profile: dict) -> list[dict[str
         container_sel = profile.get("container_selector")
         content_selectors = profile.get("content_selectors", {})
         if container_sel:
-            for tag in soup.select(container_sel):
+            elements = soup.select(container_sel)
+            tag_set = set(id(e) for e in elements)
+            for tag in elements:
+                if any(id(p) in tag_set for p in tag.parents):
+                    continue
                 role_key = detect_role(tag, profile)
                 if not role_key or role_key == "unknown": continue
                 content_html = extract_content_by_selectors(tag, content_selectors.get(role_key, []), fallback_html=True)
@@ -586,7 +590,11 @@ def extract_turns_from_soup(soup: BeautifulSoup, profile: dict) -> list[dict[str
         turn_sel = profile.get("turn_selector")
         content_selectors = profile.get("content_selectors", {})
         if turn_sel:
-            for turn_container in soup.select(turn_sel):
+            elements = soup.select(turn_sel)
+            tag_set = set(id(e) for e in elements)
+            for turn_container in elements:
+                if any(id(p) in tag_set for p in turn_container.parents):
+                    continue
                 for role in ("user", "ai"):
                     for sel in content_selectors.get(role, []):
                         found = False
