@@ -388,8 +388,10 @@ def get_clipboard_raw_b64():
     return None
 
 def get_clipboard_html():
-    """Attempt to get HTML or Text from clipboard using a robust Base64 transfer from PowerShell."""
+    """Attempt to get HTML or Text from clipboard.
+    If the content is a file path to a supported document, read it."""
     b64_str = get_clipboard_raw_b64()
+    full_raw = ""
     if b64_str:
         import base64
         try:
@@ -400,15 +402,36 @@ def get_clipboard_html():
                 full_raw = raw_bytes.decode('cp932', errors='replace')
             
             full_raw = try_repair_mojibake(full_raw)
-            
-            if "StartFragment:" in full_raw:
-                match = re.search(r'<!--StartFragment-->(.*)<!--EndFragment-->', full_raw, re.DOTALL)
-                if match: return match.group(1)
-            return full_raw
         except Exception as e:
             log_debug(f"Clipboard decoding error: {e}")
     
-    return try_repair_mojibake(pyperclip.paste())
+    if not full_raw:
+        full_raw = try_repair_mojibake(pyperclip.paste())
+
+    # --- File Path Detection ---
+    if full_raw and len(full_raw.strip()) < 1000: # Paths are usually short
+        clean_path = full_raw.strip().strip('"')
+        path_obj = Path(clean_path)
+        supported_exts = {'.html', '.mhtml', '.htm', '.txt', '.md'}
+        
+        if path_obj.suffix.lower() in supported_exts and path_obj.exists() and path_obj.is_file():
+            log_debug(f"Detected file path in clipboard: {clean_path}")
+            try:
+                # Try UTF-8 first, then fallback to CP932
+                try:
+                    full_raw = path_obj.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    full_raw = path_obj.read_text(encoding="cp932")
+                log_debug(f"Successfully read {len(full_raw)} chars from file.")
+            except Exception as e:
+                log_warn(f"Failed to read file from clipboard path: {e}")
+                # Fall back to using the path string itself (though it likely won't be valid HTML)
+
+    if "StartFragment:" in full_raw:
+        match = re.search(r'<!--StartFragment-->(.*)<!--EndFragment-->', full_raw, re.DOTALL)
+        if match: return match.group(1)
+    
+    return full_raw
 
 # --- Logic from scripts/collector ---
 
@@ -743,6 +766,7 @@ def sanitize_filename(name: str) -> str:
 def main():
     global args
     parser = argparse.ArgumentParser(description="Extract AI chat from clipboard or file.")
+    parser.add_argument("input_file", nargs="?", help="Path to input file (.html, .mhtml, .txt, .md). If omitted, reads from clipboard.")
     parser.add_argument("--save-raw", help="Path to save raw clipboard data (Base64).")
     parser.add_argument("--test", help="Path to load raw clipboard data (Base64) from for testing.")
     parser.add_argument("--debug", action="store_true", help="Show debug information.")
@@ -757,8 +781,8 @@ def main():
 
     config = load_config()
 
-    # Lock: prevent concurrent executions (skip in --test mode)
-    use_lock = not args.test
+    # Lock: prevent concurrent executions (skip in --test mode or if input file specified)
+    use_lock = not args.test and not args.input_file
     if use_lock:
         if not acquire_lock():
             status_cfg = config.get("clip", {}).get("notice", {}).get("status_toast", {})
@@ -795,6 +819,17 @@ def main():
         if "StartFragment:" in content:
             match = re.search(r'<!--StartFragment-->(.*)<!--EndFragment-->', content, re.DOTALL)
             if match: content = match.group(1)
+    if args.input_file:
+        in_path = Path(args.input_file)
+        if not in_path.exists():
+            print(f"Input file not found: {args.input_file}"); return
+        try:
+            try:
+                content = in_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                content = in_path.read_text(encoding="cp932")
+        except Exception as e:
+            print(f"Error reading file: {e}"); return
     else:
         if args.save_raw:
             raw_b64 = get_clipboard_raw_b64()

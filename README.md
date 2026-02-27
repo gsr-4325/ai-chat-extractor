@@ -42,6 +42,26 @@ Extract AI conversation from clipboard HTML and convert it to Markdown.
    - **Set Hotkey**: Right-click the new shortcut -> `Properties` -> `Shortcut` tab -> click `Shortcut key` -> press your desired keys (e.g., `Ctrl+Alt+X`) -> `OK`.
    Now you can extract chats instantly with your hotkey.
 
+## Command Line Usage
+You can run the script with various arguments:
+
+```bash
+# Extract from clipboard (default)
+python run.py
+
+# Extract from a specific file
+python run.py "C:\path\to\chat.html"
+
+# Enable debug logging
+python run.py --debug
+
+# Advanced: Save raw clipboard data (Base64) for debugging
+python run.py --save-raw raw_clipboard.txt
+
+# Advanced: Test processing using saved raw Base64 data
+python run.py --test raw_clipboard.txt
+```
+
 ## Configuration
 The tool automatically searches for `config.yaml` in the following order:
 1.  **Local Directory**: Same folder as `run.py` (useful for portable use).
