@@ -1,0 +1,31 @@
+description: Google Search AI Mode conversation format
+is_default: false
+method: sequence_pair
+scope_selector: div[data-xid='aim-mars-turn-root']
+user_selector: div.ilZyRc.R7mRQb
+user_exclude_class: hzIy
+user_content_selector: span.VndcI
+ai_selector: div.pWvJNd
+file_extensions:
+- .google.raw.html
+- .google.html
+tags: []
+role_map: {}
+fallback_ai_text: false
+noise_patterns:
+- This is for informational purposes only. For medical advice or diagnosis, consult
+  a professional.
+- AI responses may include mistakes.
+- Learn more
+- Creating a public link…
+- Creating a public link
+- Good response Bad response
+- Good response
+- Bad response
+- Your feedback helps Google improve.
+- Share more feedbackReport a problemClose
+- Share more feedback
+- Report a problem
+- See our Privacy Policy.
+- See our Privacy Policy
+- Thank you

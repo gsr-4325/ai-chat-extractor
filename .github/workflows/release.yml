@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller -r requirements.txt
+
+      - name: Build exe
+        run: |
+          pyinstaller --onedir --name ai-chat-extractor `
+            --add-data "models;models" `
+            --add-data "config.default.yaml;." `
+            run.py
+
+      - name: Package as zip
+        run: |
+          Compress-Archive -Path dist/ai-chat-extractor -DestinationPath ai-chat-extractor-${{ github.ref_name }}-windows.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ai-chat-extractor-${{ github.ref_name }}-windows.zip
+          generate_release_notes: true
